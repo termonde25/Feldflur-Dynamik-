@@ -37,5 +37,5 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 application {
-    mainClass = 'feldflur.HelloAgent'
+    mainClass = 'feldflur.Start'
 }
