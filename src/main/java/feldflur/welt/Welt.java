@@ -117,6 +117,7 @@ public class Welt
     /**
      * Was kann dieses Tier gerade sehen?
      * Nur Tiere im eigenen Sichtradius. Füchse sehen keine Hasen in Hecken.
+     * Hasen erfahren zusätzlich, wo der nächste Busch ist.
      */
     public Wahrnehmung wahrnehmung(int id)
     {
@@ -124,6 +125,7 @@ public class Welt
         if (t == null)
             return Wahrnehmung.tot();
 
+        // Andere Tiere in Sichtweite
         List<Sichtung> gesehen = new ArrayList<>();
         for (Tier o : tiere.values())
         {
@@ -137,7 +139,32 @@ public class Welt
                 continue;
             gesehen.add(new Sichtung(o.id, o.art, o.x, o.y, d));
         }
-        return new Wahrnehmung(true, t.x, t.y, istHecke(t.x, t.y), List.copyOf(gesehen));
+
+        // Nächster Busch in Sichtweite (nur für Hasen interessant)
+        float heckeX = Float.NaN, heckeY = Float.NaN;
+        if (t.art == Art.HASE)
+        {
+            float besterAbstand = Float.MAX_VALUE;
+            for (int sx = 0; sx < SPALTEN; sx++)
+            {
+                for (int sy = 0; sy < ZEILEN; sy++)
+                {
+                    if (!hecke[sx][sy])
+                        continue;
+                    float mx = (sx + 0.5f) * ZELLE;   // Mitte der Zelle
+                    float my = (sy + 0.5f) * ZELLE;
+                    float d = abstand(t.x, t.y, mx, my);
+                    if (d <= t.art.sicht && d < besterAbstand)
+                    {
+                        besterAbstand = d;
+                        heckeX = mx;
+                        heckeY = my;
+                    }
+                }
+            }
+        }
+
+        return new Wahrnehmung(true, t.x, t.y, istHecke(t.x, t.y), heckeX, heckeY, List.copyOf(gesehen));
     }
 
     /**
@@ -223,14 +250,28 @@ public class Welt
 
         // Positionen nach Art getrennt sammeln
         List<Float> hasen = new ArrayList<>();
+        List<Boolean> versteckt = new ArrayList<>();
         List<Float> fuechse = new ArrayList<>();
         for (Tier t : tiere.values())
         {
-            List<Float> liste = t.art == Art.HASE ? hasen : fuechse;
-            liste.add(t.x);
-            liste.add(t.y);
+            if (t.art == Art.HASE)
+            {
+                hasen.add(t.x);
+                hasen.add(t.y);
+                versteckt.add(istHecke(t.x, t.y));
+            }
+            else
+            {
+                fuechse.add(t.x);
+                fuechse.add(t.y);
+            }
         }
-        return new Schnappschuss(tick, veg, hk, zuArray(hasen), zuArray(fuechse), gefressen);
+
+        boolean[] vs = new boolean[versteckt.size()];
+        for (int i = 0; i < vs.length; i++)
+            vs[i] = versteckt.get(i);
+
+        return new Schnappschuss(tick, veg, hk, zuArray(hasen), vs, zuArray(fuechse), gefressen);
     }
 
     private static float[] zuArray(List<Float> liste)

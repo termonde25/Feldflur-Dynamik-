@@ -63,17 +63,23 @@ public class FeldflurAnzeige extends ApplicationAdapter
             }
         }
 
-        // Hasen: braune Kreise
-        stift.setColor(0.6f, 0.4f, 0.2f, 1);
+        // Hasen: braun auf dem Feld, hell sandfarben wenn im Busch versteckt
         float[] h = s.hasenXY();
-        for (int i = 0; i < h.length; i += 2)
-            stift.circle(h[i], h[i + 1], 0.8f, 12);
+        boolean[] versteckt = s.hasenVersteckt();
+        for (int i = 0; i < versteckt.length; i++)
+        {
+            if (versteckt[i])
+                stift.setColor(0.95f, 0.85f, 0.6f, 1);   // versteckt
+            else
+                stift.setColor(0.55f, 0.35f, 0.15f, 1);  // offen sichtbar
+            stift.circle(h[i * 2], h[i * 2 + 1], 0.8f, 12);
+        }
 
-        // Füchse: orange-rote, etwas größere Kreise
-        stift.setColor(0.9f, 0.35f, 0.1f, 1);
+        // Füchse: rot und etwas größer
+        stift.setColor(0.85f, 0.1f, 0.1f, 1);
         float[] f = s.fuchsXY();
         for (int i = 0; i < f.length; i += 2)
-            stift.circle(f[i], f[i + 1], 1.1f, 12);
+            stift.circle(f[i], f[i + 1], 1.2f, 16);
 
         stift.end();
     }

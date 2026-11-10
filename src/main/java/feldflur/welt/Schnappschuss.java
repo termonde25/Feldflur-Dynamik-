@@ -6,6 +6,7 @@ public record Schnappschuss(
     float[][] vegetation,
     boolean[][] hecke,
     float[] hasenXY,
+    boolean[] hasenVersteckt,   // pro Hase: sitzt er gerade im Busch?
     float[] fuchsXY,
     int gefressen)
 {

@@ -4,6 +4,7 @@ import java.util.Random;
 
 import feldflur.umwelt.IUmweltDienst;
 import feldflur.welt.Art;
+import feldflur.welt.Sichtung;
 import feldflur.welt.Wahrnehmung;
 import jadex.core.IComponent;
 import jadex.execution.IExecutionFeature;
@@ -11,12 +12,19 @@ import jadex.injection.annotation.OnStart;
 import jadex.requiredservice.IRequiredServiceFeature;
 
 /**
- * Hase: läuft (noch) zufällig umher.
- * Schritt C: Fuchs sehen -> in den nächsten Busch flüchten.
+ * Hase mit Subsumption-Architektur (PP4).
+ *
+ * Die Schichten werden von oben nach unten geprüft. Die erste, die etwas
+ * tun will, gewinnt und unterdrückt alle darunter:
+ *
+ *   L0 Fliehen   – Fuchs in Sicht: in den Busch, dort bleiben, oder weglaufen
+ *   L1 Fressen   – (Schritt F)
+ *   L2 Streifen  – sonst: ein Stück umherlaufen (später: Partner suchen)
  */
 public class HasenAgent
 {
-    private static final float STREIF_WEITE = 10f; // so weit läuft er höchstens auf einmal
+    private static final float STREIF_SCHRITT = 3f;  // kurz, damit er oft neu hinschaut
+    private static final float FLUCHT_SCHRITT = 4f;
 
     private final Random zufall = new Random();
     private IUmweltDienst umwelt;
@@ -41,15 +49,45 @@ public class HasenAgent
                     return;
                 }
 
-                // 2. Entscheiden: irgendwohin in der Nähe
-                float x = w.x() + (zufall.nextFloat() - 0.5f) * 2 * STREIF_WEITE;
-                float y = w.y() + (zufall.nextFloat() - 0.5f) * 2 * STREIF_WEITE;
+                // 2. Entscheiden: Schichten von oben nach unten
+                float[] ziel = schichtFliehen(w);
+                if (ziel == null)
+                    ziel = schichtStreifen(w);
 
                 // 3. Handeln und warten, bis erledigt
-                umwelt.bewegeZu(id, x, y).get();
+                umwelt.bewegeZu(id, ziel[0], ziel[1]).get();
 
                 exe.scheduleStep(this);
             }
         });
+    }
+
+    /** L0: Überleben geht vor. Liefert null, wenn kein Fuchs in Sicht ist. */
+    private float[] schichtFliehen(Wahrnehmung w)
+    {
+        Sichtung fuchs = w.naechstes(Art.FUCHS);
+        if (fuchs == null)
+            return null;   // Schicht nicht zuständig -> nächste Schicht
+
+        if (w.inHecke())
+            return new float[] { w.x(), w.y() };            // im Busch: still sitzen bleiben
+
+        if (w.hatHecke())
+            return new float[] { w.heckeX(), w.heckeY() };  // zum nächsten Busch rennen
+
+        // kein Busch in Sicht: vom Fuchs weg
+        float dx = w.x() - fuchs.x();
+        float dy = w.y() - fuchs.y();
+        float d = Math.max(0.01f, (float) Math.sqrt(dx * dx + dy * dy));
+        return new float[] { w.x() + dx / d * FLUCHT_SCHRITT, w.y() + dy / d * FLUCHT_SCHRITT };
+    }
+
+    /** L2: Wenn sonst nichts zu tun ist, ein kurzes Stück herumlaufen. */
+    private float[] schichtStreifen(Wahrnehmung w)
+    {
+        double winkel = zufall.nextDouble() * 2 * Math.PI;
+        return new float[] {
+            w.x() + (float) Math.cos(winkel) * STREIF_SCHRITT,
+            w.y() + (float) Math.sin(winkel) * STREIF_SCHRITT };
     }
 }
