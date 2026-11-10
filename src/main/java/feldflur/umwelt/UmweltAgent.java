@@ -4,6 +4,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import feldflur.welt.Art;
+import feldflur.welt.Wahrnehmung;
 import feldflur.welt.Welt;
 import jadex.core.IComponent;
 import jadex.execution.IExecutionFeature;
@@ -44,7 +45,7 @@ public class UmweltAgent implements IUmweltDienst
                 {
                     Future<Boolean> f = unterwegs.remove(id);
                     if (f != null)
-                        f.setResult(true);   // Hase ist angekommen -> sein .get() kehrt zurück
+                        f.setResult(true);
                 }
 
                 // Kopie für die Grafik ablegen
@@ -61,11 +62,20 @@ public class UmweltAgent implements IUmweltDienst
     public IFuture<Integer> anmelden(Art art)
     {
         int id = welt.neuesTier(art);
-        return new Future<>(id);             // Ergebnis ist sofort da
+        return new Future<>(id);
+    }
+
+    public IFuture<Wahrnehmung> wasIstInMeinerNaehe(int id)
+    {
+        return new Future<>(welt.wahrnehmung(id));
     }
 
     public IFuture<Boolean> bewegeZu(int id, float x, float y)
     {
+        // Tote Tiere laufen nirgendwo mehr hin
+        if (!welt.lebt(id))
+            return new Future<>(false);
+
         Future<Boolean> alt = unterwegs.remove(id);
         if (alt != null)
             alt.setResult(false);            // altes Ziel wurde aufgegeben
@@ -74,5 +84,19 @@ public class UmweltAgent implements IUmweltDienst
         Future<Boolean> f = new Future<>();  // Ergebnis kommt später
         unterwegs.put(id, f);
         return f;
+    }
+
+    public IFuture<Boolean> fangen(int fuchsId, int haseId)
+    {
+        boolean erfolg = welt.fangen(fuchsId, haseId);
+        if (erfolg)
+        {
+            // Der Hase wartet evtl. gerade auf seine Ankunft -> aufwecken mit "false"
+            Future<Boolean> f = unterwegs.remove(haseId);
+            if (f != null)
+                f.setResult(false);
+            System.out.println("Fuchs " + fuchsId + " hat Hase " + haseId + " gefangen.");
+        }
+        return new Future<>(erfolg);
     }
 }
