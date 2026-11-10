@@ -38,4 +38,8 @@ tasks.withType(JavaCompile).configureEach {
 
 application {
     mainClass = 'feldflur.Start'
+    // macOS: libGDX muss im ersten Thread laufen
+    if (System.getProperty('os.name').toLowerCase().contains('mac')) {
+        applicationDefaultJvmArgs = ['-XstartOnFirstThread']
+    }
 }

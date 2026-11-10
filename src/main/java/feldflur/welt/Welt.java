@@ -93,6 +93,23 @@ public class Welt
         return angekommen;
     }
 
+    /** Erstellt eine Kopie des aktuellen Zustands für die Anzeige. */
+    public Schnappschuss schnappschuss()
+    {
+        float[][] veg = new float[SPALTEN][];
+        for (int sx = 0; sx < SPALTEN; sx++)
+            veg[sx] = vegetation[sx].clone();
+
+        float[] xy = new float[tiere.size() * 2];
+        int i = 0;
+        for (Tier t : tiere.values())
+        {
+            xy[i++] = t.x;
+            xy[i++] = t.y;
+        }
+        return new Schnappschuss(tick, veg, xy);
+    }
+
     public float breite() { return SPALTEN * ZELLE; }
     public float hoehe()  { return ZEILEN * ZELLE; }
     public long getTick() { return tick; }
