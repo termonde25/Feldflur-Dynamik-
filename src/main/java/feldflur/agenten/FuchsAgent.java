@@ -1,136 +1,71 @@
-package blatt6.aufgabe3;
+package feldflur.agenten;
 
+import java.util.Random;
+
+import feldflur.umwelt.IUmweltDienst;
+import feldflur.welt.Art;
+import feldflur.welt.Sichtung;
+import feldflur.welt.Wahrnehmung;
+import feldflur.welt.Welt;
 import jadex.core.IComponent;
 import jadex.execution.IExecutionFeature;
-import jadex.injection.annotation.Inject;
+import jadex.injection.annotation.OnStart;
+import jadex.requiredservice.IRequiredServiceFeature;
 
+/**
+ * Fuchs: Hase in Sicht -> verfolgen und fangen, sonst Revier absuchen.
+ * Später (Phase 3) wird daraus ein BDI-Agent mit Ziel "SattWerden".
+ */
 public class FuchsAgent
 {
-    private static final long TICK_MS = 200;          // wie oft der Fuchs wahrnimmt
-    private static final double SICHT = 0.30;
-    private static final double FANG_ABSTAND = 0.04;   // gleicher Wert wie im UmweltAgent
-    private static final double STREIF_WEITE = 0.20;
-    private static final long RUHE_NACH_FANG_MS = 2000;
+    private static final float JAGD_SCHRITT = 2f;  // kurze Schritte -> oft neu hinschauen
+    private static final float SUCH_WEITE = 12f;
 
-    private enum Modus { STREIFEN, JAGEN }
-
-    @Inject
-    private IComponent agent;
-
-    @Inject
-    private IExecutionFeature exec;
-
-    private final String name;
+    private final Random zufall = new Random();
     private IUmweltDienst umwelt;
+    private int id;
 
-    private Modus modus = Modus.STREIFEN;
-    private boolean unterwegs = false;   // läuft gerade ein Lauf?
-    private int laufNummer = 0;          // Nummer des aktuellsten Laufs
-    private int beute = 0;
-
-    public FuchsAgent(String name)
+    @OnStart
+    protected void start(IComponent agent)
     {
-        this.name = name;
-    }
+        umwelt = agent.getFeature(IRequiredServiceFeature.class).getLocalService(IUmweltDienst.class);
+        id = umwelt.anmelden(Art.FUCHS).get();
+        System.out.println("Fuchs " + id + " ist da.");
 
-    @Inject
-    protected void umweltGefunden(IUmweltDienst umwelt)
-    {
-        this.umwelt = umwelt;
-        exec.scheduleStep(new Runnable()
+        IExecutionFeature exe = agent.getFeature(IExecutionFeature.class);
+        exe.scheduleStep(new Runnable()
         {
-            boolean angemeldet = false;
-
             public void run()
             {
-                try
+                // 1. Wahrnehmen
+                Wahrnehmung w = umwelt.wasIstInMeinerNaehe(id).get();
+                Sichtung hase = w.naechstes(Art.HASE);
+
+                // 2. Entscheiden + 3. Handeln
+                if (hase != null && hase.abstand() <= Welt.FANG_RADIUS)
                 {
-                    if (!angemeldet)
-                    {
-                        umwelt.anmelden(name, TierArt.FUCHS).get();
-                        angemeldet = true;
-                    }
-                    tick();
-                    exec.waitForDelay(TICK_MS).get();   // kurze Pause, dann nächster Tick
-                    exec.scheduleStep(this);
+                    // nah genug: zuschlagen
+                    umwelt.fangen(id, hase.id()).get();
                 }
-                catch (RuntimeException e)
+                else if (hase != null)
                 {
-                    // z. B. "Simulation beendet" aus wasIstInMeinerNaehe()
-                    System.out.println("[" + name + "] Ende (" + beute + " Hasen gefangen): " + e.getMessage());
-                    agent.terminate();
+                    // Hase gesehen: ein kurzes Stück hinterher
+                    float schritt = Math.min(JAGD_SCHRITT, hase.abstand());
+                    float x = w.x() + (hase.x() - w.x()) / hase.abstand() * schritt;
+                    float y = w.y() + (hase.y() - w.y()) / hase.abstand() * schritt;
+                    umwelt.bewegeZu(id, x, y).get();
                 }
+                else
+                {
+                    // nichts zu sehen: Revier absuchen
+                    // (läuft bis zu 12 m – die Umwelt unterbricht, sobald ein Hase auftaucht)
+                    float x = w.x() + (zufall.nextFloat() - 0.5f) * 2 * SUCH_WEITE;
+                    float y = w.y() + (zufall.nextFloat() - 0.5f) * 2 * SUCH_WEITE;
+                    umwelt.bewegeZu(id, x, y).get();
+                }
+
+                exe.scheduleStep(this);
             }
-        });
-    }
-
-    /** Ein Tick: wahrnehmen -> entscheiden -> (Lauf starten oder ändern). Blockiert NICHT bis zur Ankunft. */
-    private void tick()
-    {
-        Wahrnehmung w = umwelt.wasIstInMeinerNaehe(name, SICHT).get();
-        Sichtung hase = w.naechste(TierArt.HASE);
-
-        if (hase != null)
-        {
-            if (modus == Modus.STREIFEN)
-                System.out.println("[" + name + "] Hase " + hase.getName() + " gesichtet – breche Streifen ab, jage!");
-            modus = Modus.JAGEN;
-
-            // Nah genug? Dann zuschnappen.
-            if (hase.getAbstand() <= FANG_ABSTAND)
-            {
-                boolean gefangen = umwelt.fangen(name, hase.getName()).get();
-                if (gefangen)
-                {
-                    beute++;
-                    System.out.println("[" + name + "] Lecker! (" + beute + ")");
-                    starteLauf(w.getX(), w.getY());          // stehen bleiben (alter Lauf wird ersetzt)
-                    modus = Modus.STREIFEN;
-                    exec.waitForDelay(RUHE_NACH_FANG_MS).get(); // satt, kurz ausruhen
-                    return;
-                }
-            }
-
-            // Ziel in JEDEM Tick auf die aktuelle Hasenposition setzen – der Hase bewegt sich ja.
-            starteLauf(hase.getX(), hase.getY());
-            return;
-        }
-
-        // Kein Hase in Sicht
-        if (modus == Modus.JAGEN)
-        {
-            System.out.println("[" + name + "] Hase aus den Augen verloren.");
-            modus = Modus.STREIFEN;
-            unterwegs = false;   // sofort neues Streifziel wählen statt zur letzten Hasenposition zu laufen
-        }
-
-        if (!unterwegs)
-        {
-            double zielX = w.getX() + (Math.random() - 0.5) * STREIF_WEITE;
-            double zielY = w.getY() + (Math.random() - 0.5) * STREIF_WEITE;
-            starteLauf(zielX, zielY);
-        }
-    }
-
-    /**
-     * Startet einen Lauf, OHNE auf die Ankunft zu warten.
-     * Ein neuer Aufruf ersetzt den alten Lauf in der Umwelt ("Neues Ziel").
-     */
-    private void starteLauf(double x, double y)
-    {
-        unterwegs = true;
-        final int meinLauf = ++laufNummer;
-
-        umwelt.bewegeZu(name, x, y).then(angekommen ->
-        {
-            if (meinLauf == laufNummer)      // nur der aktuellste Lauf zählt
-                unterwegs = false;
-        }).catchEx(fehler ->
-        {
-            // "Neues Ziel" = wir haben den Lauf selbst ersetzt -> völlig normal, ignorieren.
-            // Andere Fehler (z. B. "Simulation beendet") merkt der nächste Tick über wasIstInMeinerNaehe().
-            if (meinLauf == laufNummer)
-                unterwegs = false;
         });
     }
 }

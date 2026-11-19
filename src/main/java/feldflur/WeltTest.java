@@ -1,8 +1,7 @@
 package feldflur;
 
-import java.util.List;
-
 import feldflur.welt.Art;
+import feldflur.welt.TickErgebnis;
 import feldflur.welt.Welt;
 
 public class WeltTest
@@ -18,11 +17,16 @@ public class WeltTest
 
         while (true)
         {
-            List<Integer> angekommen = welt.tick();
+            TickErgebnis e = welt.tick();
             System.out.printf("Tick %3d: Hase bei (%.1f | %.1f)%n", welt.getTick(), welt.getX(hase), welt.getY(hase));
-            if (angekommen.contains(hase))
+            if (e.angekommen().contains(hase))
             {
                 System.out.println("Angekommen!");
+                break;
+            }
+            if (e.unterbrochen().contains(hase))
+            {
+                System.out.println("Unterbrochen!");
                 break;
             }
         }

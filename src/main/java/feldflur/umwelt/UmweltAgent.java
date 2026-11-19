@@ -4,6 +4,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import feldflur.welt.Art;
+import feldflur.welt.TickErgebnis;
 import feldflur.welt.Wahrnehmung;
 import feldflur.welt.Welt;
 import jadex.core.IComponent;
@@ -21,7 +22,7 @@ public class UmweltAgent implements IUmweltDienst
     private final Welt welt = new Welt();
     private final SchnappschussKanal kanal;
 
-    /** Tiere, die gerade unterwegs sind: ID -> Future, das bei Ankunft erfüllt wird */
+    /** Tiere, die gerade unterwegs sind: ID -> Future, das bei Ankunft/Unterbrechung erfüllt wird */
     private final Map<Integer, Future<Boolean>> unterwegs = new HashMap<>();
 
     public UmweltAgent(SchnappschussKanal kanal)
@@ -40,13 +41,13 @@ public class UmweltAgent implements IUmweltDienst
         {
             public void run()
             {
-                // Welt einen Schritt weiterrechnen, angekommene Tiere benachrichtigen
-                for (int id : welt.tick())
-                {
-                    Future<Boolean> f = unterwegs.remove(id);
-                    if (f != null)
-                        f.setResult(true);
-                }
+                TickErgebnis ergebnis = welt.tick();
+
+                // Angekommen -> true, unterwegs unterbrochen -> false
+                for (int id : ergebnis.angekommen())
+                    melde(id, true);
+                for (int id : ergebnis.unterbrochen())
+                    melde(id, false);
 
                 // Kopie für die Grafik ablegen
                 kanal.setze(welt.schnappschuss());
@@ -55,6 +56,14 @@ public class UmweltAgent implements IUmweltDienst
                 exe.scheduleStep(this);      // nächsten Tick einplanen
             }
         });
+    }
+
+    /** Das wartende Future eines Tieres erfüllen -> dessen .get() kehrt zurück. */
+    private void melde(int id, boolean angekommen)
+    {
+        Future<Boolean> f = unterwegs.remove(id);
+        if (f != null)
+            f.setResult(angekommen);
     }
 
     // ---------- Dienstmethoden ----------
@@ -76,9 +85,8 @@ public class UmweltAgent implements IUmweltDienst
         if (!welt.lebt(id))
             return new Future<>(false);
 
-        Future<Boolean> alt = unterwegs.remove(id);
-        if (alt != null)
-            alt.setResult(false);            // altes Ziel wurde aufgegeben
+        // altes Ziel wurde aufgegeben
+        melde(id, false);
 
         welt.setzeZiel(id, x, y);
         Future<Boolean> f = new Future<>();  // Ergebnis kommt später
@@ -92,9 +100,7 @@ public class UmweltAgent implements IUmweltDienst
         if (erfolg)
         {
             // Der Hase wartet evtl. gerade auf seine Ankunft -> aufwecken mit "false"
-            Future<Boolean> f = unterwegs.remove(haseId);
-            if (f != null)
-                f.setResult(false);
+            melde(haseId, false);
             System.out.println("Fuchs " + fuchsId + " hat Hase " + haseId + " gefangen.");
         }
         return new Future<>(erfolg);

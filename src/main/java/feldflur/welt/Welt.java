@@ -112,11 +112,46 @@ public class Welt
         t.zielX = Math.max(0, Math.min(breite(), x)); // nicht aus der Welt laufen
         t.zielY = Math.max(0, Math.min(hoehe(), y));
         t.unterwegs = true;
+
+        // Merken, ob schon beim Loslaufen etwas Wichtiges in Sicht war
+        t.sahWichtigesBeimStart = siehtWichtiges(t);
+    }
+
+    // ------------------------------------------------------------------
+    // Sehen
+    // ------------------------------------------------------------------
+
+    /**
+     * Die eine Sichtregel für alles: Kann 'betrachter' das Tier 'o' sehen?
+     * - nur im eigenen Sichtradius
+     * - Füchse sehen keine Hasen, die im Busch sitzen
+     */
+    private boolean kannSehen(Tier betrachter, Tier o)
+    {
+        if (o == betrachter)
+            return false;
+        if (abstand(betrachter.x, betrachter.y, o.x, o.y) > betrachter.art.sicht)
+            return false;
+        if (betrachter.art == Art.FUCHS && o.art == Art.HASE && istHecke(o.x, o.y))
+            return false;
+        return true;
+    }
+
+    /**
+     * Sieht das Tier gerade etwas, worauf es sofort reagieren sollte?
+     * Fuchs: einen Hasen (Beute). Hase: einen Fuchs (Gefahr).
+     */
+    private boolean siehtWichtiges(Tier t)
+    {
+        Art gesucht = t.art == Art.FUCHS ? Art.HASE : Art.FUCHS;
+        for (Tier o : tiere.values())
+            if (o.art == gesucht && kannSehen(t, o))
+                return true;
+        return false;
     }
 
     /**
      * Was kann dieses Tier gerade sehen?
-     * Nur Tiere im eigenen Sichtradius. Füchse sehen keine Hasen in Hecken.
      * Hasen erfahren zusätzlich, wo der nächste Busch ist.
      */
     public Wahrnehmung wahrnehmung(int id)
@@ -125,19 +160,13 @@ public class Welt
         if (t == null)
             return Wahrnehmung.tot();
 
-        // Andere Tiere in Sichtweite
+        // Andere Tiere in Sichtweite (gleiche Regel wie bei der Unterbrechung)
         List<Sichtung> gesehen = new ArrayList<>();
         for (Tier o : tiere.values())
         {
-            if (o == t)
+            if (!kannSehen(t, o))
                 continue;
-            float d = abstand(t.x, t.y, o.x, o.y);
-            if (d > t.art.sicht)
-                continue;
-            // Deckung: Ein Hase im Busch ist für Füchse unsichtbar
-            if (t.art == Art.FUCHS && o.art == Art.HASE && istHecke(o.x, o.y))
-                continue;
-            gesehen.add(new Sichtung(o.id, o.art, o.x, o.y, d));
+            gesehen.add(new Sichtung(o.id, o.art, o.x, o.y, abstand(t.x, t.y, o.x, o.y)));
         }
 
         // Nächster Busch in Sichtweite (nur für Hasen interessant)
@@ -167,6 +196,10 @@ public class Welt
         return new Wahrnehmung(true, t.x, t.y, istHecke(t.x, t.y), heckeX, heckeY, List.copyOf(gesehen));
     }
 
+    // ------------------------------------------------------------------
+    // Fangen
+    // ------------------------------------------------------------------
+
     /**
      * Ein Fuchs versucht, einen Hasen zu fangen.
      * Die Welt entscheidet eindeutig: Ein Hase kann nur einmal gefressen werden.
@@ -191,11 +224,8 @@ public class Welt
     // Tick
     // ------------------------------------------------------------------
 
-    /**
-     * Ein Simulationsschritt.
-     * @return IDs der Tiere, die in diesem Tick an ihrem Ziel angekommen sind
-     */
-    public List<Integer> tick()
+    /** Ein Simulationsschritt. */
+    public TickErgebnis tick()
     {
         tick++;
 
@@ -204,7 +234,7 @@ public class Welt
             for (int sy = 0; sy < ZEILEN; sy++)
                 vegetation[sx][sy] = Math.min(1f, vegetation[sx][sy] + 0.001f);
 
-        // 3. Tiere ein Stück Richtung Ziel bewegen
+        // 3a. Tiere ein Stück Richtung Ziel bewegen
         List<Integer> angekommen = new ArrayList<>();
         for (Tier t : tiere.values())
         {
@@ -230,7 +260,21 @@ public class Welt
                 t.y += dy / abstand * t.art.tempo;
             }
         }
-        return angekommen;
+
+        // 3b. Unterbrechen: Wer beim Loslaufen nichts Wichtiges sah,
+        //     es jetzt aber sieht, bleibt stehen und soll neu entscheiden.
+        //     (Erst nach 3a prüfen, damit alle Positionen aktuell sind.)
+        List<Integer> unterbrochen = new ArrayList<>();
+        for (Tier t : tiere.values())
+        {
+            if (t.unterwegs && !t.sahWichtigesBeimStart && siehtWichtiges(t))
+            {
+                t.unterwegs = false;
+                unterbrochen.add(t.id);
+            }
+        }
+
+        return new TickErgebnis(angekommen, unterbrochen);
     }
 
     // ------------------------------------------------------------------
