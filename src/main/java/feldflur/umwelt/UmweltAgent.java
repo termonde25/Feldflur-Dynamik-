@@ -22,7 +22,7 @@ public class UmweltAgent implements IUmweltDienst
     private final Welt welt = new Welt();
     private final SchnappschussKanal kanal;
 
-    /** Tiere, die gerade unterwegs sind: ID -> Future, das bei Ankunft/Unterbrechung erfüllt wird */
+    /** Tiere mit laufendem Auftrag: ID -> Future, das bei Erledigung/Abbruch erfüllt wird */
     private final Map<Integer, Future<Boolean>> unterwegs = new HashMap<>();
 
     public UmweltAgent(SchnappschussKanal kanal)
@@ -59,11 +59,19 @@ public class UmweltAgent implements IUmweltDienst
     }
 
     /** Das wartende Future eines Tieres erfüllen -> dessen .get() kehrt zurück. */
-    private void melde(int id, boolean angekommen)
+    private void melde(int id, boolean erfolg)
     {
         Future<Boolean> f = unterwegs.remove(id);
         if (f != null)
-            f.setResult(angekommen);
+            f.setResult(erfolg);
+    }
+
+    /** Neues Future für einen Auftrag anlegen, das im Tick erfüllt wird. */
+    private IFuture<Boolean> neuerAuftrag(int id)
+    {
+        Future<Boolean> f = new Future<>();
+        unterwegs.put(id, f);
+        return f;
     }
 
     // ---------- Dienstmethoden ----------
@@ -85,13 +93,34 @@ public class UmweltAgent implements IUmweltDienst
         if (!welt.lebt(id))
             return new Future<>(false);
 
-        // altes Ziel wurde aufgegeben
-        melde(id, false);
-
+        melde(id, false);            // alter Auftrag wird abgebrochen
         welt.setzeZiel(id, x, y);
-        Future<Boolean> f = new Future<>();  // Ergebnis kommt später
-        unterwegs.put(id, f);
-        return f;
+        return neuerAuftrag(id);     // erfüllt bei Ankunft/Unterbrechung
+    }
+
+    public IFuture<Boolean> lauern(int id)
+    {
+        melde(id, false);            // alter Auftrag wird abgebrochen
+        if (!welt.lauern(id))
+            return new Future<>(false);  // kein lebender Fuchs
+        return neuerAuftrag(id);     // erfüllt im nächsten Tick
+    }
+
+    public IFuture<Boolean> springeAn(int id, float x, float y)
+    {
+        melde(id, false);            // alter Auftrag wird abgebrochen
+        if (!welt.springeAn(id, x, y))
+            return new Future<>(false);  // lauert nicht -> kein Ansprung
+        System.out.println("Fuchs " + id + " sprintet los!");
+        return neuerAuftrag(id);     // erfüllt bei Ankunft/Unterbrechung
+    }
+
+    public IFuture<Boolean> fressen(int id)
+    {
+        melde(id, false);            // alter Auftrag wird abgebrochen
+        if (!welt.fressen(id))
+            return new Future<>(false);  // geht gerade nicht
+        return neuerAuftrag(id);     // erfüllt im nächsten Tick
     }
 
     public IFuture<Boolean> fangen(int fuchsId, int haseId)

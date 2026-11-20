@@ -30,7 +30,7 @@ public class Start
         // libGDX läuft im main-Thread und blockiert, bis das Fenster geschlossen wird
         Lwjgl3ApplicationConfiguration config = new Lwjgl3ApplicationConfiguration();
         config.setTitle("Feldflur-Dynamik");
-        config.setWindowedMode(1000, 600);
+        config.setWindowedMode(1000, 600 + FeldflurAnzeige.LEISTE_HOEHE);  // Feld + Statusleiste
         config.setForegroundFPS(60);
         new Lwjgl3Application(new FeldflurAnzeige(kanal), config);
 

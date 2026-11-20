@@ -8,6 +8,8 @@ public record Schnappschuss(
     float[] hasenXY,
     boolean[] hasenVersteckt,   // pro Hase: sitzt er gerade im Busch?
     float[] fuchsXY,
+    boolean[] fuchsLauert,      // pro Fuchs: liegt er auf der Lauer?
+    float[] bauXY,              // Fuchsbaue, gleiche Reihenfolge wie fuchsXY
     int gefressen)
 {
 }

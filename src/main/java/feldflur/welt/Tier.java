@@ -20,6 +20,18 @@ class Tier
      */
     boolean sahWichtigesBeimStart = false;
 
+    /** Lage des Baus (nur bei Füchsen gesetzt, sonst NaN). */
+    float bauX = Float.NaN, bauY = Float.NaN;
+
+    /** Fuchs liegt geduckt auf der Lauer (Hasen sehen ihn dann schlechter). */
+    boolean lauert = false;
+
+    /** Wie viele Ticks der Sprint noch anhält (0 = normales Tempo). */
+    int sprintTicks = 0;
+
+    /** Energie 0..100 (vorerst nur bei Hasen genutzt). */
+    float energie = 100f;
+
     Tier(int id, Art art, float x, float y)
     {
         this.id = id;
